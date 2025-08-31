@@ -1,11 +1,18 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
 
+#include <filesystem> // workss on C++17
+namespace fs = std::filesystem;
+
 int main() {
 	std::string videoPath;
 
 	std::cout << "Please enter the path to your video: ";
 	std::getline(std::cin, videoPath);
+
+	fs::path videoPathObj(videoPath);
+	std::string folderName = videoPathObj.stem().string(); 
+	fs::create_directory(folderName);
 
 	cv::VideoCapture videoCap(videoPath);
 
@@ -33,7 +40,8 @@ int main() {
 
 		if (frameCount % static_cast<int>(fps) == 0) { // (int)fps is the C-style cast (older, less explicit).
 			filename = "frame_" + std::to_string(savedCount) + ".png";
-			cv::imwrite(filename, frame); // saves an image to a specified filename
+
+			cv::imwrite( folderName + "/" + filename, frame); // saves an image to a specified filename
 
 			std::cout << "Saved " << filename << std::endl;
 
