@@ -35,7 +35,7 @@ int main() {
 			filename = "frame_" + std::to_string(savedCount) + ".png";
 			cv::imwrite(filename, frame); // saves an image to a specified filename
 
-			std::cout << "Saved " << filename << " / " << std::to_string(static_cast<int>(totalFrames)) << std::endl;
+			std::cout << "Saved " << filename << std::endl;
 
 			savedCount++;
 		}
@@ -52,7 +52,7 @@ int main() {
 
 
 
-	std::cout << "Finished saving " << savedCount << "frames. ";
+	std::cout << "Finished saving " << savedCount << " frames. ";
 
 	return 0;
 
