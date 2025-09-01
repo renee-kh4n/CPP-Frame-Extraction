@@ -62,12 +62,16 @@ int main() {
 
     // App variables
     char videoPath[256] = "";
+
     bool extracting = false;
+    bool finished = false;
+
     int savedCount = 0;
     int frameCount = 0;
     double fps = 0;
     double totalFrames = 0;
     double duration = totalFrames / fps;
+
     cv::VideoCapture cap;
     cv::Mat frame;
     GLuint textureID = 0;
@@ -129,6 +133,10 @@ int main() {
             }
         }
 
+        fs::path videoPathObj(videoPath);
+        std::string folderName = videoPathObj.stem().string();
+        fs::create_directory(folderName);
+
         if (extracting) {
             if (cap.read(frame)) {
                 frameCount++;
@@ -136,8 +144,7 @@ int main() {
                 // Save 1 frame per second
                 if (frameCount % static_cast<int>(fps) == 0) {
                     std::string filename = "frame_" + std::to_string(savedCount) + ".png";
-                    fs::path videoPathObj(videoPath);
-                    std::string folderName = videoPathObj.stem().string();
+                    
                     cv::imwrite(folderName + "/" + filename, frame);
                     savedCount++;
 
@@ -158,8 +165,16 @@ int main() {
             }
             else {
                 extracting = false;
+                finished = true;
                 cap.release();
             }
+        }
+
+        if (finished) {
+            ImGui::Text("Finished saving %d frames.", savedCount);
+
+            ImGui::Text("The frames are saved in: ", fs::absolute(folderName));
+
         }
 
         if (ImGui::Button("Done")) {
