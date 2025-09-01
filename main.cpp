@@ -70,7 +70,7 @@ int main() {
     int frameCount = 0;
     double fps = 0;
     double totalFrames = 0;
-    double duration = totalFrames / fps;
+    double duration = 0;
 
     cv::VideoCapture cap;
     cv::Mat frame;
@@ -104,6 +104,9 @@ int main() {
             }
             std::cout << "Video File: " << videoPath << std::endl;
 
+            if (fps > 0 && totalFrames > 0) {
+                duration = totalFrames / fps;
+            }
 
         }
 
