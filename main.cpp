@@ -76,6 +76,7 @@ int main() {
     cv::Mat frame;
     GLuint textureID = 0;
 
+    std::string build_path = fs::current_path().string();
     std::string folderName = "";
 
     // Main loop
@@ -132,7 +133,7 @@ int main() {
 
         ImGui::Text("Video Path: %s", videoPath);
         ImGui::Text("Video Duration: %.0f seconds", duration);
-        ImGui::Text("Frame Rate: %.0f", fps);
+        ImGui::Text("Frame Rate: %.0f fps", fps);
         ImGui::Text("Total Number of frames: %.0f", totalFrames);
         ImGui::Text("");
 
@@ -140,6 +141,10 @@ int main() {
             extracting = true;
            
         }
+
+        fs::path videoPathObj(videoPath);
+        folderName = videoPathObj.stem().string();
+        //fs::create_directory(folderName);
 
         if (extracting) {
             if (cap.read(frame)) {
@@ -149,9 +154,12 @@ int main() {
                 if (frameCount % static_cast<int>(fps) == 0) {
                     std::string filename = "frame_" + std::to_string(savedCount) + ".png";
 
-                    cv::imwrite(fs::current_path().string() + "/" + folderName + "/" + filename, frame);
+
+                    cv::imwrite( build_path + "/" + folderName + "/" + filename, frame);
                     savedCount++;
                     std::cout << " File: " << filename << std::endl;
+
+                    std::cout << " current path: " << build_path << std::endl;
                 }
 
                 if (textureID) glDeleteTextures(1, &textureID);
@@ -159,7 +167,7 @@ int main() {
 
                 ImGui::Text("Extracting... Saved %d frames", savedCount);
                 ImGui::Text("Reading Frame %d / %.0f", frameCount, totalFrames);
-                ImGui::Text("FPS: %.2f", fps);
+                /*ImGui::Text("FPS: %.2f", fps);*/ // no need, already stated above
 
                 if (textureID) {
                     ImGui::Image((void*)(intptr_t)textureID, ImVec2(640, 360));
@@ -173,15 +181,12 @@ int main() {
             }
         }
 
-        fs::path videoPathObj(videoPath);
-        std::string folderName = videoPathObj.stem().string();
-        //fs::create_directory(folderName);
-
+        
 
         if (finished) {
             ImGui::Text("Finished saving %d frames.", savedCount);
 
-            ImGui::Text("The frames are saved in: ", fs::absolute(folderName).string().c_str());
+            ImGui::Text("The frames are saved in: %s", fs::absolute(folderName).string().c_str());
 
         }
 
