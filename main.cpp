@@ -76,6 +76,8 @@ int main() {
     cv::Mat frame;
     GLuint textureID = 0;
 
+    std::string folderName = "";
+
     // Main loop
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
@@ -104,7 +106,23 @@ int main() {
             }
             std::cout << "Video File: " << videoPath << std::endl;
 
-       
+            cap.open(videoPath);
+            if (cap.isOpened()) {
+                fps = cap.get(cv::CAP_PROP_FPS);
+                totalFrames = cap.get(cv::CAP_PROP_FRAME_COUNT);
+                savedCount = 0;
+                frameCount = 0;
+
+                fs::path videoPathObj(videoPath);
+                folderName = videoPathObj.stem().string();
+                fs::create_directory(folderName);
+
+                extracting = true;
+            }
+            else {
+                std::cerr << "Error: Cannot open video file.\n";
+                ImGui::Text("Please choose a video file.");
+            }
 
         }
 
@@ -119,28 +137,9 @@ int main() {
         ImGui::Text("");
 
         if (ImGui::Button("Start Extraction")) {
-            cap.open(videoPath);
-            if (cap.isOpened()) {
-                fps = cap.get(cv::CAP_PROP_FPS);
-                totalFrames = cap.get(cv::CAP_PROP_FRAME_COUNT);
-                savedCount = 0;
-                frameCount = 0;
-
-                fs::path videoPathObj(videoPath);
-                std::string folderName = videoPathObj.stem().string();
-                fs::create_directory(folderName);
-
-                extracting = true;
-            }
-            else {
-                std::cerr << "Error: Cannot open video file.\n";
-                ImGui::Text("Please choose a video file.");
-            }
+            extracting = true;
+           
         }
-
-        fs::path videoPathObj(videoPath);
-        std::string folderName = videoPathObj.stem().string();
-        //fs::create_directory(folderName);
 
         if (extracting) {
             if (cap.read(frame)) {
@@ -149,8 +148,8 @@ int main() {
                 // Save 1 frame per second
                 if (frameCount % static_cast<int>(fps) == 0) {
                     std::string filename = "frame_" + std::to_string(savedCount) + ".png";
-                    
-                    cv::imwrite( fs::current_path().string() + "/" + folderName + "/" + filename, frame);
+
+                    cv::imwrite(fs::current_path().string() + "/" + folderName + "/" + filename, frame);
                     savedCount++;
                     std::cout << " File: " << filename << std::endl;
                 }
@@ -173,6 +172,11 @@ int main() {
                 cap.release();
             }
         }
+
+        fs::path videoPathObj(videoPath);
+        std::string folderName = videoPathObj.stem().string();
+        //fs::create_directory(folderName);
+
 
         if (finished) {
             ImGui::Text("Finished saving %d frames.", savedCount);
