@@ -84,7 +84,7 @@ int main() {
 
         // Position & size for side-mounted panel
         ImGui::SetNextWindowPos(ImVec2(0, 0));  // stick to left/top
-        ImGui::SetNextWindowSize(ImVec2((float)display_w), (float)display_h))); // full width width, full height
+        ImGui::SetNextWindowSize(ImVec2( (float)display_w, (float)display_h )); // full width width, full height
 
         // Disable resizing & moving
         ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
