@@ -109,6 +109,7 @@ int main() {
             }
             std::cout << "Video File: " << videoPath << std::endl;
 
+            fs::current_path(build_path);  // after dialog
             fs::path videoPathObj(videoPath);
             folderName = videoPathObj.stem().string();
             fs::create_directory(folderName);
