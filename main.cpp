@@ -67,6 +67,7 @@ int main() {
     int frameCount = 0;
     double fps = 0;
     double totalFrames = 0;
+    double duration = totalFrames / fps;
     cv::VideoCapture cap;
     cv::Mat frame;
     GLuint textureID = 0;
@@ -98,7 +99,15 @@ int main() {
                 strncpy(videoPath, chosen.c_str(), sizeof(videoPath));
             }
             std::cout << "Video File: " << videoPath << std::endl;
+
+
         }
+
+        ImGui::Text("Video Path: %s", videoPath);
+        ImGui::Text("Video Duration: %.0f seconds", duration);
+        ImGui::Text("Frame Rate: %.0f", fps);
+        ImGui::Text("Total Number of frames: %.0f", totalFrames);
+        ImGui::Text("");
 
         if (ImGui::Button("Start Extraction")) {
             cap.open(videoPath);
@@ -116,6 +125,7 @@ int main() {
             }
             else {
                 std::cerr << "Error: Cannot open video file.\n";
+                ImGui::Text("Please choose a video file.");
             }
         }
 
@@ -138,7 +148,7 @@ int main() {
                 textureID = matToTexture(frame);
 
                 ImGui::Text("Extracting... Saved %d frames", savedCount);
-                ImGui::Text("Frame %d / %.0f", frameCount, totalFrames);
+                ImGui::Text("Reading Frame %d / %.0f", frameCount, totalFrames);
                 ImGui::Text("FPS: %.2f", fps);
 
                 if (textureID) {
@@ -149,12 +159,10 @@ int main() {
             else {
                 extracting = false;
                 cap.release();
-                ImGui::Text("Finished saving %d frames.", savedCount);
             }
         }
 
         if (ImGui::Button("Done")) {
-            // Close the entire application
             glfwSetWindowShouldClose(window, GLFW_TRUE);
         }
        
