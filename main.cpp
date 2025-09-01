@@ -78,6 +78,8 @@ int main() {
 
     std::string build_path = fs::current_path().string();
     std::string folderName = "";
+    //bool directoryCreated = false;
+    //fs::path outputDir;
 
     // Main loop
     while (!glfwWindowShouldClose(window)) {
@@ -85,7 +87,7 @@ int main() {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-
+        
         // Get the main window size from GLFW
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
@@ -107,6 +109,10 @@ int main() {
             }
             std::cout << "Video File: " << videoPath << std::endl;
 
+            fs::path videoPathObj(videoPath);
+            folderName = videoPathObj.stem().string();
+            fs::create_directory(folderName);
+
             cap.open(videoPath);
             if (cap.isOpened()) {
                 fps = cap.get(cv::CAP_PROP_FPS);
@@ -114,11 +120,8 @@ int main() {
                 savedCount = 0;
                 frameCount = 0;
 
-                fs::path videoPathObj(videoPath);
-                folderName = videoPathObj.stem().string();
-                fs::create_directory(folderName);
-
                 extracting = true;
+
             }
             else {
                 std::cerr << "Error: Cannot open video file.\n";
@@ -142,9 +145,7 @@ int main() {
            
         }
 
-        fs::path videoPathObj(videoPath);
-        folderName = videoPathObj.stem().string();
-        //fs::create_directory(folderName);
+
 
         if (extracting) {
             if (cap.read(frame)) {
@@ -155,11 +156,14 @@ int main() {
                     std::string filename = "frame_" + std::to_string(savedCount) + ".png";
 
 
-                    cv::imwrite( build_path + "/" + folderName + "/" + filename, frame);
+                    if (!cv::imwrite(folderName + "/" + filename, frame)) {
+                        std::cerr << "Failed to save: " << folderName + "/" + filename << std::endl;
+                    }
+
                     savedCount++;
                     std::cout << " File: " << filename << std::endl;
 
-                    std::cout << " current path: " << build_path << std::endl;
+                    std::cout << " current path: " << fs::absolute(folderName).string() << std::endl;
                 }
 
                 if (textureID) glDeleteTextures(1, &textureID);
