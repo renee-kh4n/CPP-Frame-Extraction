@@ -104,10 +104,12 @@ int main() {
             }
             std::cout << "Video File: " << videoPath << std::endl;
 
-            if (fps > 0 && totalFrames > 0) {
-                duration = totalFrames / fps;
-            }
+       
 
+        }
+
+        if (fps > 0 && totalFrames > 0) {
+            duration = totalFrames / fps;
         }
 
         ImGui::Text("Video Path: %s", videoPath);
@@ -138,7 +140,7 @@ int main() {
 
         fs::path videoPathObj(videoPath);
         std::string folderName = videoPathObj.stem().string();
-        fs::create_directory(folderName);
+        //fs::create_directory(folderName);
 
         if (extracting) {
             if (cap.read(frame)) {
@@ -148,9 +150,8 @@ int main() {
                 if (frameCount % static_cast<int>(fps) == 0) {
                     std::string filename = "frame_" + std::to_string(savedCount) + ".png";
                     
-                    cv::imwrite(folderName + "/" + filename, frame);
+                    cv::imwrite( fs::current_path().string() + "/" + folderName + "/" + filename, frame);
                     savedCount++;
-
                     std::cout << " File: " << filename << std::endl;
                 }
 
@@ -176,7 +177,7 @@ int main() {
         if (finished) {
             ImGui::Text("Finished saving %d frames.", savedCount);
 
-            ImGui::Text("The frames are saved in: ", fs::absolute(folderName));
+            ImGui::Text("The frames are saved in: ", fs::absolute(folderName).string().c_str());
 
         }
 
