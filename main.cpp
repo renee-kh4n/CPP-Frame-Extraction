@@ -72,6 +72,8 @@ int main() {
     double totalFrames = 0;
     double duration = 0;
 
+    int savedFPS = 1;
+
     cv::VideoCapture cap;
     cv::Mat frame;
     GLuint textureID = 0;
@@ -121,7 +123,7 @@ int main() {
                 savedCount = 0;
                 frameCount = 0;
 
-                extracting = true;
+              /*  extracting = true;*/
 
             }
             else {
@@ -141,6 +143,50 @@ int main() {
         ImGui::Text("Total Number of frames: %.0f", totalFrames);
         ImGui::Text("");
 
+        //if(ImGui::Button("1")) {
+        //    savedFPS = 1;
+        //}if(ImGui::Button("2")) {
+        //    savedFPS = 2;
+        //}if(ImGui::Button("3")) {
+        //    savedFPS = 3;
+        //}if(ImGui::Button("4")) {
+        //    savedFPS = 4;
+        //}if(ImGui::Button("5")) {
+        //    savedFPS = 5;
+        //}
+
+        //const char* items[] = { "1", "2", "3", "4", "5" };
+
+        // combo box sample
+   /*     if (ImGui::BeginCombo("Frames per Second", items[savedFPS - 1])) {
+            for (int i = 0; i < IM_ARRAYSIZE(items); i++) {
+                bool isSelected = (savedFPS == i + 1);
+                if (ImGui::Selectable(items[i], isSelected)) {
+                    savedFPS = i + 1;
+                }
+                if (isSelected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }*/
+
+        //radio button sample
+        ImGui::Text("Frames per Second:");
+        ImGui::SameLine();
+        for (int i = 1; i <= 5; i++) {
+            char label[2];
+            snprintf(label, sizeof(label), "%d", i);
+            if (ImGui::RadioButton(label, savedFPS == i)) {
+                savedFPS = i;
+            }
+            ImGui::SameLine();
+        }
+        ImGui::NewLine(); // move to next row after last SameLine()
+
+
+        ImGui::Text("Saving %d frames per second", savedFPS);
+
         if (ImGui::Button("Start Extraction")) {
             extracting = true;
            
@@ -152,8 +198,8 @@ int main() {
             if (cap.read(frame)) {
                 frameCount++;
 
-                // Save 1 frame per second
-                if (frameCount % static_cast<int>(fps) == 0) {
+                // Save savedFPS frame per second
+                if (frameCount % static_cast<int>(fps/savedFPS) == 0) {
                     std::string filename = "frame_" + std::to_string(savedCount) + ".png";
 
 
