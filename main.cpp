@@ -153,34 +153,7 @@ int main() {
         ImGui::Text("Total Number of frames: %.0f", totalFrames);
         ImGui::Text("");
 
-        //if(ImGui::Button("1")) {
-        //    savedFPS = 1;
-        //}if(ImGui::Button("2")) {
-        //    savedFPS = 2;
-        //}if(ImGui::Button("3")) {
-        //    savedFPS = 3;
-        //}if(ImGui::Button("4")) {
-        //    savedFPS = 4;
-        //}if(ImGui::Button("5")) {
-        //    savedFPS = 5;
-        //}
-
-        //const char* items[] = { "1", "2", "3", "4", "5" };
-
-        // combo box sample
-   /*     if (ImGui::BeginCombo("Frames per Second", items[savedFPS - 1])) {
-            for (int i = 0; i < IM_ARRAYSIZE(items); i++) {
-                bool isSelected = (savedFPS == i + 1);
-                if (ImGui::Selectable(items[i], isSelected)) {
-                    savedFPS = i + 1;
-                }
-                if (isSelected) {
-                    ImGui::SetItemDefaultFocus();
-                }
-            }
-            ImGui::EndCombo();
-        }*/
-
+        
         //radio button sample
         ImGui::Text("Frames per Second:");
         ImGui::SameLine();
@@ -212,17 +185,7 @@ int main() {
                 // Save savedFPS frame per second
                 if (frameCount % static_cast<int>(fps/savedFPS) == 0) {
 
-
-                    ////get the frame number and write it on the current frame
-                    //rectangle(frame, cv::Point(10, 2), cv::Point(100, 20),
-                    //    cv::Scalar(255, 255, 255), -1);
-                    //std::stringstream ss;
-                    //ss << cap.get(cv::CAP_PROP_POS_FRAMES);
-                    //std::string frameNumberString = ss.str();
-                    //putText(frame, frameNumberString.c_str(), cv::Point(15, 15),
-                    //    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0)); WE DONT NEED THIS
-
-                    // Make sure fgMask is valid and matches frame
+                                        // Make sure fgMask is valid and matches frame
                     if (fgMask.empty()) {
                         std::cerr << "fgMask is empty, skipping frame" << std::endl;
                         continue; // skip this iteration
@@ -235,23 +198,6 @@ int main() {
 
 
                     std::cout << frame.size() << " : " << fgMask.size() << std::endl; //same size 
-
-                    // convert to 4 channels (BGRA)
-                    //cv::Mat frameTransparent;
-                    //cv::cvtColor(frame, frameTransparent, cv::COLOR_BGR2BGRA);
-
-                    //for (int y = 0; y < frame.rows; y++) {
-                    //    for (int x = 0; y < frame.cols; x++) {
-                    //        if (fgMask.at<uchar>(y, x) == 0) {
-                    //            // background → alpha = 0 (transparent)
-                    //            frameTransparent.at<cv::Vec4b>(y, x)[3] = 0;
-                    //        }
-                    //        else {
-                    //            // foreground → alpha = 255 (opaque
-                    //            frameTransparent.at<cv::Vec4b>(y, x)[3] = 255;
-                    //        }
-                    //    }
-                    //}
 
                     cv::Mat alpha;
                     cv::threshold(fgMask, alpha, 0, 255, cv::THRESH_BINARY);
@@ -298,8 +244,6 @@ int main() {
                 cap.release();
             }
         }
-
-        
 
         if (finished) {
             ImGui::Text("Finished saving %d frames.", savedCount);
