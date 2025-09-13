@@ -1,8 +1,15 @@
-#include "imgui.h"
+﻿#include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include <GLFW/glfw3.h>
+
 #include <opencv2/opencv.hpp>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/videoio.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/video.hpp>
+
 #include <iostream>
 #include <filesystem>
 
@@ -75,13 +82,16 @@ int main() {
     int savedFPS = 1;
 
     cv::VideoCapture cap;
-    cv::Mat frame;
-    GLuint textureID = 0;
+    cv::Mat frame, fgMask;
+    GLuint textureID = 0, maskTextureID=0;
 
     std::string build_path = fs::current_path().string();
     std::string folderName = "";
     //bool directoryCreated = false;
     //fs::path outputDir;
+
+    cv::Ptr<cv::BackgroundSubtractor> pBackSub;
+    pBackSub = cv::createBackgroundSubtractorKNN();
 
     // Main loop
     while (!glfwWindowShouldClose(window)) {
@@ -107,7 +117,7 @@ int main() {
         if (ImGui::Button("Choose Video File")) {
             std::string chosen = openFileDialog();
             if (!chosen.empty()) {
-                strncpy(videoPath, chosen.c_str(), sizeof(videoPath));
+                std::strncpy(videoPath, chosen.c_str(), sizeof(videoPath));
             }
             std::cout << "Video File: " << videoPath << std::endl;
 
@@ -195,15 +205,69 @@ int main() {
 
 
         if (extracting) {
+             // frame is still empty
             if (cap.read(frame)) {
                 frameCount++;
-
+                pBackSub->apply(frame, fgMask);
                 // Save savedFPS frame per second
                 if (frameCount % static_cast<int>(fps/savedFPS) == 0) {
+
+
+                    ////get the frame number and write it on the current frame
+                    //rectangle(frame, cv::Point(10, 2), cv::Point(100, 20),
+                    //    cv::Scalar(255, 255, 255), -1);
+                    //std::stringstream ss;
+                    //ss << cap.get(cv::CAP_PROP_POS_FRAMES);
+                    //std::string frameNumberString = ss.str();
+                    //putText(frame, frameNumberString.c_str(), cv::Point(15, 15),
+                    //    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0)); WE DONT NEED THIS
+
+                    // Make sure fgMask is valid and matches frame
+                    if (fgMask.empty()) {
+                        std::cerr << "fgMask is empty, skipping frame" << std::endl;
+                        continue; // skip this iteration
+                    }
+
+                    // Ensure fgMask matches frame size
+                    if (fgMask.size() != frame.size()) {
+                        cv::resize(fgMask, fgMask, frame.size());
+                    }
+
+
+                    std::cout << frame.size() << " : " << fgMask.size() << std::endl; //same size 
+
+                    // convert to 4 channels (BGRA)
+                    //cv::Mat frameTransparent;
+                    //cv::cvtColor(frame, frameTransparent, cv::COLOR_BGR2BGRA);
+
+                    //for (int y = 0; y < frame.rows; y++) {
+                    //    for (int x = 0; y < frame.cols; x++) {
+                    //        if (fgMask.at<uchar>(y, x) == 0) {
+                    //            // background → alpha = 0 (transparent)
+                    //            frameTransparent.at<cv::Vec4b>(y, x)[3] = 0;
+                    //        }
+                    //        else {
+                    //            // foreground → alpha = 255 (opaque
+                    //            frameTransparent.at<cv::Vec4b>(y, x)[3] = 255;
+                    //        }
+                    //    }
+                    //}
+
+                    cv::Mat alpha;
+                    cv::threshold(fgMask, alpha, 0, 255, cv::THRESH_BINARY);
+
+                    // Merge channels: B, G, R, A
+                    std::vector<cv::Mat> channels;
+                    cv::split(frame, channels);   // gives B,G,R
+                    channels.push_back(alpha);    // add alpha
+                    cv::Mat frameTransparent;
+                    cv::merge(channels, frameTransparent);
+
+
                     std::string filename = "frame_" + std::to_string(savedCount) + ".png";
 
 
-                    if (!cv::imwrite(folderName + "/" + filename, frame)) {
+                    if (!cv::imwrite(folderName + "/" + filename, frameTransparent)) {
                         std::cerr << "Failed to save: " << folderName + "/" + filename << std::endl;
                     }
 
@@ -213,15 +277,18 @@ int main() {
                     std::cout << " current path: " << fs::absolute(folderName).string() << std::endl;
                 }
 
-                if (textureID) glDeleteTextures(1, &textureID);
                 textureID = matToTexture(frame);
+                maskTextureID = matToTexture(fgMask);
+
 
                 ImGui::Text("Extracting... Saved %d frames", savedCount);
                 ImGui::Text("Reading Frame %d / %.0f", frameCount, totalFrames);
                 /*ImGui::Text("FPS: %.2f", fps);*/ // no need, already stated above
 
-                if (textureID) {
+                if (textureID && maskTextureID) {
                     ImGui::Image((void*)(intptr_t)textureID, ImVec2(640, 360));
+
+                    ImGui::Image((void*)(intptr_t)maskTextureID, ImVec2(640, 360));
                 }
 
             }
@@ -261,6 +328,8 @@ int main() {
 
     // Cleanup
     if (textureID) glDeleteTextures(1, &textureID);
+
+    if (maskTextureID) glDeleteTextures(1, &maskTextureID);
     cap.release();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
