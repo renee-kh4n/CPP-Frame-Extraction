@@ -11,6 +11,8 @@
 #include <opencv2/video.hpp>
 
 #include <iostream>
+#include <cstdio>
+#include <ctime>
 #include <filesystem>
 
 #include <windows.h>
@@ -37,8 +39,18 @@ std::string openFileDialog() {
 
 // Convert cv::Mat (BGR) to OpenGL texture for ImGui
 GLuint matToTexture(const cv::Mat& mat) {
-    cv::Mat rgb;
-    cv::cvtColor(mat, rgb, cv::COLOR_BGR2RGB);
+    if (mat.empty()) return 0;
+
+    cv::Mat input = mat;
+
+    if (mat.channels() == 1) {
+        cv::cvtColor(mat, input, cv::COLOR_GRAY2BGR); //why is there an error
+    }
+    else {
+        cv::cvtColor(mat, input, cv::COLOR_BGR2RGB);
+
+    }
+
 
     GLuint textureID;
     glGenTextures(1, &textureID);
@@ -47,7 +59,9 @@ GLuint matToTexture(const cv::Mat& mat) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, rgb.cols, rgb.rows, 0, GL_RGB, GL_UNSIGNED_BYTE, rgb.data);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, input.cols, input.rows, 0, GL_RGB, GL_UNSIGNED_BYTE, input.data);
+
+
 
     return textureID;
 }
@@ -83,15 +97,20 @@ int main() {
 
     cv::VideoCapture cap;
     cv::Mat frame, fgMask;
-    GLuint textureID = 0, maskTextureID=0;
+    GLuint textureID = 0, maskTextureID = 0;
 
     std::string build_path = fs::current_path().string();
     std::string folderName = "";
     //bool directoryCreated = false;
     //fs::path outputDir;
 
+    std::clock_t start = 0, end = 0;
+    double processDuration = 0;
+
     cv::Ptr<cv::BackgroundSubtractor> pBackSub;
     pBackSub = cv::createBackgroundSubtractorKNN();
+
+
 
     // Main loop
     while (!glfwWindowShouldClose(window)) {
@@ -99,21 +118,21 @@ int main() {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-        
+
         // Get the main window size from GLFW
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
 
         // Position & size for side-mounted panel
         ImGui::SetNextWindowPos(ImVec2(0, 0));  // stick to left/top
-        ImGui::SetNextWindowSize(ImVec2( (float)display_w, (float)display_h )); // full width width, full height
+        ImGui::SetNextWindowSize(ImVec2((float)display_w, (float)display_h)); // full width width, full height
 
         // Disable resizing & moving
         ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
 
         ImGui::Begin("Video Frame Extractor", nullptr, window_flags);
 
-    
+
         if (ImGui::Button("Choose Video File")) {
             std::string chosen = openFileDialog();
             if (!chosen.empty()) {
@@ -133,7 +152,7 @@ int main() {
                 savedCount = 0;
                 frameCount = 0;
 
-              /*  extracting = true;*/
+                /*  extracting = true;*/
 
             }
             else {
@@ -153,7 +172,7 @@ int main() {
         ImGui::Text("Total Number of frames: %.0f", totalFrames);
         ImGui::Text("");
 
-        
+
         //radio button sample
         ImGui::Text("Frames per Second:");
         ImGui::SameLine();
@@ -172,32 +191,63 @@ int main() {
 
         if (ImGui::Button("Start Extraction")) {
             extracting = true;
-           
+            start = std::clock();
+
         }
 
 
 
         if (extracting) {
-             // frame is still empty
+            // frame is still empty
             if (cap.read(frame)) {
                 frameCount++;
                 pBackSub->apply(frame, fgMask);
                 // Save savedFPS frame per second
-                if (frameCount % static_cast<int>(fps/savedFPS) == 0) {
+                if (frameCount % static_cast<int>(fps / savedFPS) == 0) {
 
-                                        // Make sure fgMask is valid and matches frame
-                    if (fgMask.empty()) {
-                        std::cerr << "fgMask is empty, skipping frame" << std::endl;
-                        continue; // skip this iteration
-                    }
 
-                    // Ensure fgMask matches frame size
-                    if (fgMask.size() != frame.size()) {
-                        cv::resize(fgMask, fgMask, frame.size());
-                    }
 
 
                     std::cout << frame.size() << " : " << fgMask.size() << std::endl; //same size 
+
+
+                    //// build bg from corner colors
+                    //int W = frame.cols;
+                    //int H = frame.rows;
+
+                    //cv::Vec3b topLeft = frame.at<cv::Vec3b>(0, 0);
+                    //cv::Vec3b topRight = frame.at<cv::Vec3b>(0, W - 1);
+                    //cv::Vec3b bottomLeft = frame.at<cv::Vec3b>(H - 1, 0);
+                    //cv::Vec3b bottomRight = frame.at<cv::Vec3b>(H - 1, W - 1);
+
+                    //cv::Mat bg(H, W, CV_8UC3);
+                    //for (int y = 0; y < H; y++) {
+                    //    float fy = (float)y / (H - 1);
+                    //    for (int x = 0; x < W; x++) {
+                    //        float fx = (float)x / (W - 1);
+                    //        cv::Vec3f color =
+                    //            (1 - fx) * (1 - fy) * cv::Vec3f(topLeft) +
+                    //            fx * (1 - fy) * cv::Vec3f(topRight) +
+                    //            (1 - fx) * fy * cv::Vec3f(bottomLeft) +
+                    //            fx * fy * cv::Vec3f(bottomRight);
+                    //        bg.at<cv::Vec3b>(y, x) = cv::Vec3b(
+                    //            (uchar)color[0], (uchar)color[1], (uchar)color[2]
+                    //        );
+                    //    }
+                    //}
+
+                    //// subtract background
+                    //cv::Mat diff, gray;
+                    //cv::absdiff(frame, bg, diff);
+                    //cv::cvtColor(diff, gray, cv::COLOR_BGR2GRAY);
+                    //cv::threshold(gray, fgMask, 30, 255, cv::THRESH_BINARY);
+
+                    //// clean up mask
+                    //cv::morphologyEx(fgMask, fgMask, cv::MORPH_OPEN, cv::Mat(), cv::Point(-1, -1), 2);
+                    //cv::morphologyEx(fgMask, fgMask, cv::MORPH_CLOSE, cv::Mat(), cv::Point(-1, -1), 2);
+
+                    //// ... then continue with your alpha + save frameTransparent code
+
 
                     cv::Mat alpha;
                     cv::threshold(fgMask, alpha, 0, 255, cv::THRESH_BINARY);
@@ -208,6 +258,17 @@ int main() {
                     channels.push_back(alpha);    // add alpha
                     cv::Mat frameTransparent;
                     cv::merge(channels, frameTransparent);
+
+                    // Make sure fgMask is valid and matches frame
+                    if (fgMask.empty()) {
+                        std::cerr << "fgMask is empty, skipping frame" << std::endl;
+                        continue; // skip this iteration
+                    }
+
+                    // Ensure fgMask matches frame size
+                    if (fgMask.size() != frame.size()) {
+                        cv::resize(fgMask, fgMask, frame.size());
+                    }
 
 
                     std::string filename = "frame_" + std::to_string(savedCount) + ".png";
@@ -224,7 +285,7 @@ int main() {
                 }
 
                 textureID = matToTexture(frame);
-                maskTextureID = matToTexture(fgMask);
+                maskTextureID = matToTexture(fgMask); //why is there an error?
 
 
                 ImGui::Text("Extracting... Saved %d frames", savedCount);
@@ -250,12 +311,22 @@ int main() {
 
             ImGui::Text("The frames are saved in: %s", fs::absolute(folderName).string().c_str());
 
+            end = std::clock();
+
+            processDuration = (end - start) / (double)CLOCKS_PER_SEC;
+
+            ImGui::Text("Operation took %lf seconds", processDuration);
+
+            std::cout << "Operation took " << processDuration << " seconds" << std::endl;
+
+            finished = false;
+
         }
 
         if (ImGui::Button("Done")) {
             glfwSetWindowShouldClose(window, GLFW_TRUE);
         }
-       
+
 
         ImGui::End();
 
