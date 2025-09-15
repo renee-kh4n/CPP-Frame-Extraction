@@ -98,6 +98,7 @@ int main() {
     cv::VideoCapture cap;
     cv::Mat frame, fgMask;
     GLuint textureID = 0, maskTextureID = 0;
+    int vidWidth = 0, vidHeight = 0;
 
     std::string build_path = fs::current_path().string();
     std::string folderName = "";
@@ -152,6 +153,10 @@ int main() {
                 savedCount = 0;
                 frameCount = 0;
 
+                // ✅ Get the width & height of the video here
+                vidWidth = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
+                vidHeight = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
+
                 /*  extracting = true;*/
 
             }
@@ -198,112 +203,76 @@ int main() {
 
 
         if (extracting) {
-            // frame is still empty
-            if (cap.read(frame)) {
-                frameCount++;
-                pBackSub->apply(frame, fgMask);
-                // Save savedFPS frame per second
-                if (frameCount % static_cast<int>(fps / savedFPS) == 0) {
+            
+            if (extracting) {
+                if (cap.read(frame)) {
+                    frameCount++;
+
+                    // Only process frames we want to save
+                    if (frameCount % static_cast<int>(fps / savedFPS) == 0) {
+                        // 1. Define a rectangle 10px away from each edge
+                      /*  int vidWidth = frame.cols;
+                        int vidHeight = frame.rows;*/
+                        //cv::Rect rect(50, 50, W - 20, H - 20);  // x, y, width, height
+
+                        int rectWidth = vidWidth - (vidWidth /4);
+                        int rectHeight = vidHeight - (vidHeight /4);
+
+                        int x = (vidWidth - rectWidth) / 2;  // center horizontally
+                        int y = (vidHeight - rectHeight) / 2; // center vertically
+
+                        cv::Rect rect(x, y, rectWidth, rectHeight);
 
 
+                        // 2. Initialize mask and models
+                        cv::Mat grabMask(frame.size(), CV_8UC1, cv::GC_BGD); // start with all background
+                        cv::Mat bgModel, fgModel;
 
+                        // 3. Run GrabCut
+                        cv::grabCut(frame, grabMask, rect, bgModel, fgModel, 5, cv::GC_INIT_WITH_RECT);
 
-                    std::cout << frame.size() << " : " << fgMask.size() << std::endl; //same size 
+                        // 4. Create binary alpha mask
+                        cv::Mat alpha;
+                        alpha = (grabMask == cv::GC_FGD) | (grabMask == cv::GC_PR_FGD);
+                        alpha.convertTo(alpha, CV_8UC1, 255);
 
+                        // 5. Merge BGR + alpha
+                        std::vector<cv::Mat> channels;
+                        cv::split(frame, channels); // B, G, R
+                        channels.push_back(alpha);
+                        cv::Mat frameTransparent;
+                        cv::merge(channels, frameTransparent);
 
-                    //// build bg from corner colors
-                    //int W = frame.cols;
-                    //int H = frame.rows;
+                        // 6. Save PNG
+                        std::string filename = "frame_" + std::to_string(savedCount) + ".png";
+                        if (!cv::imwrite(folderName + "/" + filename, frameTransparent)) {
+                            std::cerr << "Failed to save: " << folderName + "/" << filename << std::endl;
+                        }
 
-                    //cv::Vec3b topLeft = frame.at<cv::Vec3b>(0, 0);
-                    //cv::Vec3b topRight = frame.at<cv::Vec3b>(0, W - 1);
-                    //cv::Vec3b bottomLeft = frame.at<cv::Vec3b>(H - 1, 0);
-                    //cv::Vec3b bottomRight = frame.at<cv::Vec3b>(H - 1, W - 1);
+                        savedCount++;
+                        std::cout << "Saved: " << filename << std::endl;
 
-                    //cv::Mat bg(H, W, CV_8UC3);
-                    //for (int y = 0; y < H; y++) {
-                    //    float fy = (float)y / (H - 1);
-                    //    for (int x = 0; x < W; x++) {
-                    //        float fx = (float)x / (W - 1);
-                    //        cv::Vec3f color =
-                    //            (1 - fx) * (1 - fy) * cv::Vec3f(topLeft) +
-                    //            fx * (1 - fy) * cv::Vec3f(topRight) +
-                    //            (1 - fx) * fy * cv::Vec3f(bottomLeft) +
-                    //            fx * fy * cv::Vec3f(bottomRight);
-                    //        bg.at<cv::Vec3b>(y, x) = cv::Vec3b(
-                    //            (uchar)color[0], (uchar)color[1], (uchar)color[2]
-                    //        );
-                    //    }
-                    //}
-
-                    //// subtract background
-                    //cv::Mat diff, gray;
-                    //cv::absdiff(frame, bg, diff);
-                    //cv::cvtColor(diff, gray, cv::COLOR_BGR2GRAY);
-                    //cv::threshold(gray, fgMask, 30, 255, cv::THRESH_BINARY);
-
-                    //// clean up mask
-                    //cv::morphologyEx(fgMask, fgMask, cv::MORPH_OPEN, cv::Mat(), cv::Point(-1, -1), 2);
-                    //cv::morphologyEx(fgMask, fgMask, cv::MORPH_CLOSE, cv::Mat(), cv::Point(-1, -1), 2);
-
-                    //// ... then continue with your alpha + save frameTransparent code
-
-
-                    cv::Mat alpha;
-                    cv::threshold(fgMask, alpha, 0, 255, cv::THRESH_BINARY);
-
-                    // Merge channels: B, G, R, A
-                    std::vector<cv::Mat> channels;
-                    cv::split(frame, channels);   // gives B,G,R
-                    channels.push_back(alpha);    // add alpha
-                    cv::Mat frameTransparent;
-                    cv::merge(channels, frameTransparent);
-
-                    // Make sure fgMask is valid and matches frame
-                    if (fgMask.empty()) {
-                        std::cerr << "fgMask is empty, skipping frame" << std::endl;
-                        continue; // skip this iteration
+                        //// 7. For display in ImGui
+                        //textureID = matToTexture(frame);
+                        //maskTextureID = matToTexture(alpha);
                     }
 
-                    // Ensure fgMask matches frame size
-                    if (fgMask.size() != frame.size()) {
-                        cv::resize(fgMask, fgMask, frame.size());
+                    textureID = matToTexture(frame);
+
+                    ImGui::Text("Extracting... Saved %d frames", savedCount);
+                    ImGui::Text("Reading Frame %d / %.0f", frameCount, totalFrames);
+                    if (textureID && maskTextureID) {
+                        ImGui::Image((void*)(intptr_t)textureID, ImVec2(640, 360));
+                        ImGui::Image((void*)(intptr_t)maskTextureID, ImVec2(640, 360));
                     }
-
-
-                    std::string filename = "frame_" + std::to_string(savedCount) + ".png";
-
-
-                    if (!cv::imwrite(folderName + "/" + filename, frameTransparent)) {
-                        std::cerr << "Failed to save: " << folderName + "/" + filename << std::endl;
-                    }
-
-                    savedCount++;
-                    std::cout << " File: " << filename << std::endl;
-
-                    std::cout << " current path: " << fs::absolute(folderName).string() << std::endl;
                 }
-
-                textureID = matToTexture(frame);
-                maskTextureID = matToTexture(fgMask); //why is there an error?
-
-
-                ImGui::Text("Extracting... Saved %d frames", savedCount);
-                ImGui::Text("Reading Frame %d / %.0f", frameCount, totalFrames);
-                /*ImGui::Text("FPS: %.2f", fps);*/ // no need, already stated above
-
-                if (textureID && maskTextureID) {
-                    ImGui::Image((void*)(intptr_t)textureID, ImVec2(640, 360));
-
-                    ImGui::Image((void*)(intptr_t)maskTextureID, ImVec2(640, 360));
+                else {
+                    extracting = false;
+                    finished = true;
+                    cap.release();
                 }
+            }
 
-            }
-            else {
-                extracting = false;
-                finished = true;
-                cap.release();
-            }
         }
 
         if (finished) {
