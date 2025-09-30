@@ -1,0 +1,5 @@
+# CMake generation dependency list for this directory.
+C:/CPP-Frame-Extraction/glfw/docs/CMakeLists.txt
+C:/cmake-4.1.0-rc1-windows-x86_64/share/cmake-4.1/Modules/FindDoxygen.cmake
+C:/cmake-4.1.0-rc1-windows-x86_64/share/cmake-4.1/Modules/FindPackageHandleStandardArgs.cmake
+C:/cmake-4.1.0-rc1-windows-x86_64/share/cmake-4.1/Modules/FindPackageMessage.cmake
