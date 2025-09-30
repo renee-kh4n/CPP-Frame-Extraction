@@ -12,12 +12,12 @@ cd vcpkg
 .\bootstrap-vcpkg.bat
 .\vcpkg install opencv:x64-windows
 
-It doesn’t work with the file path “/Renee Khan/” because there is a space
-Shorten or move to C:/
-
 .\vcpkg install opencv
 
 .\vcpkg integrate install
+
+//It doesn’t work with the file path “/Renee Khan/” because there is a space
+Shorten or move to C:/
 
 
 Errors with <opencv2/opencv>
@@ -26,18 +26,63 @@ git clone https://github.com/bkaradzic/bgfx.cmake.git
 cd bgfx.cmake
 git submodule init
 git submodule update
-cmake -S. -Bcmake-build
-cmake --build cmake-build 
+
+
+git clone https://github.com/ocornut/imgui.git
+
+git clone https://github.com/glfw/glfw.git
+cd glfw
+cmake -S . -B build
+cmake --build build
+
+
+
 Create CMake.txt
 cmake_minimum_required(VERSION 3.10)
-project(FrameExtractor)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+project(FrameExtractor)
 
 find_package(OpenCV REQUIRED)
 
+find_package(OpenGL REQUIRED)
 
-add_executable(main main.cpp)
-target_link_libraries(main PRIVATE ${OpenCV_LIBS})
+add_subdirectory(glfw)
+
+
+# --- ImGui sources ---
+set(IMGUI_DIR ${CMAKE_SOURCE_DIR}/imgui)
+
+set(IMGUI_SOURCES
+    ${IMGUI_DIR}/imgui.cpp
+    ${IMGUI_DIR}/imgui_draw.cpp
+    ${IMGUI_DIR}/imgui_widgets.cpp
+    ${IMGUI_DIR}/imgui_tables.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+)
+
+# --- Add executable ---
+add_executable(main
+    main.cpp
+    ${IMGUI_SOURCES}
+)
+
+# --- Include dirs ---
+target_include_directories(main PRIVATE
+    ${OpenCV_INCLUDE_DIRS}
+    ${IMGUI_DIR}
+    ${IMGUI_DIR}/backends
+)
+
+# --- Link libs ---
+target_link_libraries(main PRIVATE
+    ${OpenCV_LIBS}
+    glfw
+    OpenGL::GL
+)
 
 
 mkdir build
