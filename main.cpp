@@ -116,7 +116,7 @@ int main() {
     std::string projectRoot = fs::absolute(buildDir + "/../..").string(); // go one directory up
     std::string pythonScript = (fs::path(projectRoot) / "remove_bg.py").string();
 
-    fs::path outputRoot = fs::path(buildDir) / "output_frames";
+    fs::path outputRoot = fs::path(buildDir);
     fs::create_directories(outputRoot);
 
     cv::VideoCapture cap;
