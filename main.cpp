@@ -224,7 +224,7 @@ int main() {
 
         if (extracting) {
             ImGui::Text("Extracting... saved %d frames", savedCount.load()); 
-            ImGui::ProgressBar((float)savedCount.load() / totalFrames.load(), ImVec2(300, 20));
+            ImGui::ProgressBar((float)savedCount.load() / (totalFrames.load()/ fps.load()*savedFPS), ImVec2(300, 20));
         }
         else if (!videoPath.empty() && extractionDone) {
             ImGui::Text("Extraction complete! Total saved: %d", savedCount.load());
