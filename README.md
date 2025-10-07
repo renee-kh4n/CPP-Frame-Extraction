@@ -1,4 +1,4 @@
-# CPP-Frame-Extraction
+﻿# CPP-Frame-Extraction
 This project is built using C++ to extract frames (per second) from a video input.
 
 
@@ -16,7 +16,7 @@ cd vcpkg
 
 .\vcpkg integrate install
 
-//It doesn�t work with the file path �/Renee Khan/� because there is a space
+//It doesn’t work with the file path “/Renee Khan/” because there is a space
 Shorten or move to C:/
 
 
@@ -97,3 +97,25 @@ cmake --build .
 Alternative: 
 cd debug
 main.exe
+
+========================================================================================================
+Install dependencies:
+
+pip install rembg pillow
+
+
+Compile C++ code (example using g++ + OpenCV):
+
+g++ extractor.cpp -o extractor `pkg-config --cflags --libs opencv4` -std=c++17 -pthread
+
+
+Run it:
+
+./extractor
+
+
+When finished:
+
+frames_output/ → original frames
+
+frames_output/no_bg/ → background-removed PNGs

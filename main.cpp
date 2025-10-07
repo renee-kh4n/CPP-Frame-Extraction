@@ -1,267 +1,238 @@
+#include <opencv2/opencv.hpp>
+#include <iostream>
+#include <filesystem>
+#include <thread>
+#include <queue>
+#include <mutex>
+#include <condition_variable>
+#include <atomic>
+#include <chrono>
+#include <cstdlib>
+
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include <GLFW/glfw3.h>
-#include <opencv2/opencv.hpp>
-#include <iostream>
-#include <filesystem>
-
 #include <windows.h>
 #include <commdlg.h>
 
 namespace fs = std::filesystem;
 
+// ======================
+// SafeQueue for frames
+// ======================
+template <typename T>
+class SafeQueue {
+    std::queue<T> q;
+    std::mutex m;
+    std::condition_variable cv;
+public:
+    void push(T value) {
+        {
+            std::unique_lock<std::mutex> lock(m);
+            q.push(std::move(value));
+        }
+        cv.notify_one();
+    }
 
+    bool pop(T& value) {
+        std::unique_lock<std::mutex> lock(m);
+        if (q.empty()) return false;
+        value = std::move(q.front());
+        q.pop();
+        return true;
+    }
+
+    bool empty() {
+        std::unique_lock<std::mutex> lock(m);
+        return q.empty();
+    }
+};
+
+// ======================
+// Helper: File dialog
+// ======================
 std::string openFileDialog() {
     char filename[MAX_PATH] = "";
     OPENFILENAME ofn;
     ZeroMemory(&ofn, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
+    ofn.lpstrFilter = "Video Files\0*.mp4;*.avi;*.mkv;*.mov\0All Files\0*.*\0";
     ofn.lpstrFile = filename;
     ofn.nMaxFile = MAX_PATH;
-    ofn.lpstrFilter = "Video Files\0*.mp4;*.avi;*.mov\0All Files\0*.*\0";
-    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+    ofn.Flags = OFN_FILEMUSTEXIST;
+    ofn.lpstrTitle = "Select Video File";
     if (GetOpenFileName(&ofn)) {
         return std::string(filename);
     }
     return "";
 }
 
+// ======================
+// OpenCV texture helper
+// ======================
 
-// Convert cv::Mat (BGR) to OpenGL texture for ImGui
+    // Define GL_BGR and GL_BGRA for Windows if not included by default
+    #ifndef GL_BGR
+    #define GL_BGR 0x80E0
+    #endif
+    #ifndef GL_BGRA
+    #define GL_BGRA 0x80E1
+    #endif
+
+
 GLuint matToTexture(const cv::Mat& mat) {
-    cv::Mat rgb;
-    cv::cvtColor(mat, rgb, cv::COLOR_BGR2RGB);
+    if (mat.empty()) return 0;
 
     GLuint textureID;
     glGenTextures(1, &textureID);
     glBindTexture(GL_TEXTURE_2D, textureID);
-
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, rgb.cols, rgb.rows, 0, GL_RGB, GL_UNSIGNED_BYTE, rgb.data);
-
+    GLenum inputColorFormat = (mat.channels() == 3) ? GL_BGR : GL_BGRA;
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, mat.cols, mat.rows, 0, inputColorFormat, GL_UNSIGNED_BYTE, mat.ptr());
     return textureID;
 }
 
+// ======================
+// Main program
+// ======================
 int main() {
-    // Setup GLFW
     if (!glfwInit()) return -1;
-    GLFWwindow* window = glfwCreateWindow(1280, 720, "Video Frame Extractor", NULL, NULL);
-    if (!window) return -1;
+    const char* glsl_version = "#version 130";
+    GLFWwindow* window = glfwCreateWindow(1280, 720, "Multithreaded Frame Extractor", NULL, NULL);
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
-
-    // Setup ImGui
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init("#version 130");
+    ImGui_ImplOpenGL3_Init(glsl_version);
     ImGui::StyleColorsDark();
 
-    // App variables
-    char videoPath[256] = "";
-
-    bool extracting = false;
-    bool finished = false;
-
-    int savedCount = 0;
-    int frameCount = 0;
-    double fps = 0;
-    double totalFrames = 0;
-    double duration = 0;
-
-    int savedFPS = 1;
-
+    // State variables
+    std::string videoPath;
+    std::string outputDir;
     cv::VideoCapture cap;
-    cv::Mat frame;
+    SafeQueue<std::pair<int, cv::Mat>> frameQueue;
+    std::atomic<bool> extracting = false;
+    std::atomic<bool> extractionDone = false;
+    std::atomic<int> savedCount = 0;
+    std::atomic<int> totalFrames = 0;
+    std::atomic<double> fps = 0;
     GLuint textureID = 0;
+    cv::Mat displayFrame;
 
     std::string build_path = fs::current_path().string();
-    std::string folderName = "";
-    //bool directoryCreated = false;
-    //fs::path outputDir;
 
-    // Main loop
+    // ======================
+    // GUI loop
+    // ======================
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-        
-        // Get the main window size from GLFW
-        int display_w, display_h;
-        glfwGetFramebufferSize(window, &display_w, &display_h);
 
-        // Position & size for side-mounted panel
-        ImGui::SetNextWindowPos(ImVec2(0, 0));  // stick to left/top
-        ImGui::SetNextWindowSize(ImVec2( (float)display_w, (float)display_h )); // full width width, full height
+        ImGui::Begin("Video Frame Extractor", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 
-        // Disable resizing & moving
-        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
-
-        ImGui::Begin("Video Frame Extractor", nullptr, window_flags);
-
-    
         if (ImGui::Button("Choose Video File")) {
             std::string chosen = openFileDialog();
             if (!chosen.empty()) {
-                strncpy(videoPath, chosen.c_str(), sizeof(videoPath));
-            }
-            std::cout << "Video File: " << videoPath << std::endl;
-
-            fs::current_path(build_path);  // after dialog
-            fs::path videoPathObj(videoPath);
-            folderName = videoPathObj.stem().string();
-            fs::create_directory(folderName);
-
-            cap.open(videoPath);
-            if (cap.isOpened()) {
-                fps = cap.get(cv::CAP_PROP_FPS);
-                totalFrames = cap.get(cv::CAP_PROP_FRAME_COUNT);
-                savedCount = 0;
-                frameCount = 0;
-
-              /*  extracting = true;*/
-
-            }
-            else {
-                std::cerr << "Error: Cannot open video file.\n";
-                ImGui::Text("Please choose a video file.");
-            }
-
-        }
-
-        if (fps > 0 && totalFrames > 0) {
-            duration = totalFrames / fps;
-        }
-
-        ImGui::Text("Video Path: %s", videoPath);
-        ImGui::Text("Video Duration: %.0f seconds", duration);
-        ImGui::Text("Frame Rate: %.0f fps", fps);
-        ImGui::Text("Total Number of frames: %.0f", totalFrames);
-        ImGui::Text("");
-
-        //if(ImGui::Button("1")) {
-        //    savedFPS = 1;
-        //}if(ImGui::Button("2")) {
-        //    savedFPS = 2;
-        //}if(ImGui::Button("3")) {
-        //    savedFPS = 3;
-        //}if(ImGui::Button("4")) {
-        //    savedFPS = 4;
-        //}if(ImGui::Button("5")) {
-        //    savedFPS = 5;
-        //}
-
-        //const char* items[] = { "1", "2", "3", "4", "5" };
-
-        // combo box sample
-   /*     if (ImGui::BeginCombo("Frames per Second", items[savedFPS - 1])) {
-            for (int i = 0; i < IM_ARRAYSIZE(items); i++) {
-                bool isSelected = (savedFPS == i + 1);
-                if (ImGui::Selectable(items[i], isSelected)) {
-                    savedFPS = i + 1;
+                videoPath = chosen;
+                outputDir = fs::path(videoPath).stem().string() + "_frames";
+                fs::current_path(build_path);
+                fs::create_directory(outputDir);
+                cap.open(videoPath);
+                if (cap.isOpened()) {
+                    fps = cap.get(cv::CAP_PROP_FPS);
+                    totalFrames = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_COUNT));
                 }
-                if (isSelected) {
-                    ImGui::SetItemDefaultFocus();
+                else {
+                    std::cerr << "Error: Cannot open video.\n";
                 }
             }
-            ImGui::EndCombo();
-        }*/
+        }
 
-        //radio button sample
-        ImGui::Text("Frames per Second:");
-        ImGui::SameLine();
+        if (!videoPath.empty()) {
+            ImGui::Text("Video: %s", videoPath.c_str());
+            ImGui::Text("FPS: %.2f", fps.load());
+            ImGui::Text("Total Frames: %d", totalFrames.load());
+        }
+
+        static int savedFPS = 1;
+        ImGui::Text("Frames per second to save:");
         for (int i = 1; i <= 5; i++) {
-            char label[2];
-            snprintf(label, sizeof(label), "%d", i);
-            if (ImGui::RadioButton(label, savedFPS == i)) {
-                savedFPS = i;
-            }
+            char label[2]; snprintf(label, sizeof(label), "%d", i);
+            if (ImGui::RadioButton(label, savedFPS == i)) savedFPS = i;
             ImGui::SameLine();
         }
-        ImGui::NewLine(); // move to next row after last SameLine()
+        ImGui::NewLine();
 
+        if (!extracting && ImGui::Button("Start Extraction")) {
+            if (cap.isOpened()) {
+                extracting = true;
+                extractionDone = false;
+                savedCount = 0;
+                std::thread([&]() {
+                    cv::Mat frame;
+                    int frameIndex = 0;
+                    while (cap.read(frame)) {
+                        frameQueue.push({ frameIndex++, frame.clone() });
+                    }
+                    extractionDone = true;
+                    cap.release();
+                    }).detach();
 
-        ImGui::Text("Saving %d frames per second", savedFPS);
-
-        if (ImGui::Button("Start Extraction")) {
-            extracting = true;
-           
+                std::thread([&]() {
+                    while (!extractionDone || !frameQueue.empty()) {
+                        std::pair<int, cv::Mat> item;
+                        if (frameQueue.pop(item)) {
+                            std::string filename = outputDir + "/frame_" + std::to_string(item.first) + ".png";
+                            cv::imwrite(filename, item.second);
+                            savedCount++;
+                        }
+                        else {
+                            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                        }
+                    }
+                    // Run rembg batch
+                    fs::path scriptPath = fs::current_path().parent_path() / "remove_bg.py";
+                    std::string command = "python \"" + scriptPath.string() + "\" \"" + outputDir + "\"";
+                    system(command.c_str());
+                    extracting = false;
+                    }).detach();
+            }
         }
-
-
 
         if (extracting) {
-            if (cap.read(frame)) {
-                frameCount++;
-
-                // Save savedFPS frame per second
-                if (frameCount % static_cast<int>(fps/savedFPS) == 0) {
-                    std::string filename = "frame_" + std::to_string(savedCount) + ".png";
-
-
-                    if (!cv::imwrite(folderName + "/" + filename, frame)) {
-                        std::cerr << "Failed to save: " << folderName + "/" + filename << std::endl;
-                    }
-
-                    savedCount++;
-                    std::cout << " File: " << filename << std::endl;
-
-                    std::cout << " current path: " << fs::absolute(folderName).string() << std::endl;
-                }
-
-                if (textureID) glDeleteTextures(1, &textureID);
-                textureID = matToTexture(frame);
-
-                ImGui::Text("Extracting... Saved %d frames", savedCount);
-                ImGui::Text("Reading Frame %d / %.0f", frameCount, totalFrames);
-                /*ImGui::Text("FPS: %.2f", fps);*/ // no need, already stated above
-
-                if (textureID) {
-                    ImGui::Image((void*)(intptr_t)textureID, ImVec2(640, 360));
-                }
-
-            }
-            else {
-                extracting = false;
-                finished = true;
-                cap.release();
+            ImGui::Text("Extracting... saved %d frames", savedCount.load());
+            if (!frameQueue.empty()) {
+                auto qsize = savedCount.load();
+                ImGui::ProgressBar((float)qsize / totalFrames.load(), ImVec2(300, 20));
             }
         }
-
-        
-
-        if (finished) {
-            ImGui::Text("Finished saving %d frames.", savedCount);
-
-            ImGui::Text("The frames are saved in: %s", fs::absolute(folderName).string().c_str());
-
+        else if (!videoPath.empty() && extractionDone) {
+            ImGui::Text("Extraction complete. Total saved: %d", savedCount.load());
+            ImGui::Text("Output folder: %s", outputDir.c_str());
         }
 
-        if (ImGui::Button("Done")) {
-            glfwSetWindowShouldClose(window, GLFW_TRUE);
-        }
-       
+        if (ImGui::Button("Exit")) glfwSetWindowShouldClose(window, true);
 
         ImGui::End();
 
-        // Rendering
+        // Render
         ImGui::Render();
-        int display_w2, display_h2;
-        glfwGetFramebufferSize(window, &display_w2, &display_h2);
-        glViewport(0, 0, display_w2, display_h2);
+        int display_w, display_h;
+        glfwGetFramebufferSize(window, &display_w, &display_h);
+        glViewport(0, 0, display_w, display_h);
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         glfwSwapBuffers(window);
     }
 
-    // Cleanup
     if (textureID) glDeleteTextures(1, &textureID);
-    cap.release();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
