@@ -1,9 +1,15 @@
-# remove_bg_batch.py
-import sys
-import os
-from rembg import remove
-from PIL import Image
+import sys, os, subprocess
 from pathlib import Path
+
+# Auto-install rembg + pillow if missing
+try:
+    from rembg import remove
+    from PIL import Image
+except ModuleNotFoundError:
+    print("rembg or pillow not found, installing...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "rembg", "pillow"])
+    from rembg import remove
+    from PIL import Image
 
 def remove_backgrounds(folder):
     input_dir = Path(folder)
