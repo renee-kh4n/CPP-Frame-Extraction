@@ -4,8 +4,8 @@ This project is built using C++ to extract frames (per second) from a video inpu
 
 ## Setup the build:
 
-Errors with vcpkg and installation. 
-How to resolve:
+Errors with vcpkg and installation.   
+How to resolve:  
 cd C:\<root>
 git clone https://github.com/microsoft/vcpkg.git  
 cd vcpkg  
