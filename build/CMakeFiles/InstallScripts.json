@@ -1,0 +1,10 @@
+{
+	"InstallScripts" : 
+	[
+		"C:/CPP-Frame-Extraction/build/cmake_install.cmake",
+		"C:/CPP-Frame-Extraction/build/glfw/cmake_install.cmake",
+		"C:/CPP-Frame-Extraction/build/glfw/src/cmake_install.cmake",
+		"C:/CPP-Frame-Extraction/build/glfw/docs/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

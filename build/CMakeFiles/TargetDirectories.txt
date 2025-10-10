@@ -1,0 +1,11 @@
+C:/CPP-Frame-Extraction/build/CMakeFiles/main.dir
+C:/CPP-Frame-Extraction/build/CMakeFiles/INSTALL.dir
+C:/CPP-Frame-Extraction/build/CMakeFiles/ALL_BUILD.dir
+C:/CPP-Frame-Extraction/build/CMakeFiles/ZERO_CHECK.dir
+C:/CPP-Frame-Extraction/build/glfw/CMakeFiles/uninstall.dir
+C:/CPP-Frame-Extraction/build/glfw/CMakeFiles/INSTALL.dir
+C:/CPP-Frame-Extraction/build/glfw/CMakeFiles/ALL_BUILD.dir
+C:/CPP-Frame-Extraction/build/glfw/src/CMakeFiles/glfw.dir
+C:/CPP-Frame-Extraction/build/glfw/src/CMakeFiles/update_mappings.dir
+C:/CPP-Frame-Extraction/build/glfw/src/CMakeFiles/INSTALL.dir
+C:/CPP-Frame-Extraction/build/glfw/docs/CMakeFiles/INSTALL.dir

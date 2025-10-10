@@ -1,67 +1,257 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
+#include <filesystem>
+#include <thread>
+#include <queue>
+#include <mutex>
+#include <condition_variable>
 
-#include <filesystem> // workss on C++17
+#include <atomic>
+#include <chrono>
+#include <cstdlib>
+
+
+#include <algorithm>
+#define NOMINMAX
+#include <windows.h>
+
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
+#include <GLFW/glfw3.h>
+#include <commdlg.h>
+
 namespace fs = std::filesystem;
 
+// ======================
+// Thread-safe queue
+// ======================
+template <typename T>
+class SafeQueue {
+    std::queue<T> q;
+    std::mutex m;
+public:
+    void push(T value) {
+        std::lock_guard<std::mutex> lock(m);
+        q.push(std::move(value));
+    }
+
+    bool pop(T& value) {
+        std::lock_guard<std::mutex> lock(m);
+        if (q.empty()) return false;
+        value = std::move(q.front());
+        q.pop();
+        return true;
+    }
+
+    bool empty() {
+        std::lock_guard<std::mutex> lock(m);
+        return q.empty();
+    }
+};
+
+// ======================
+// File dialog helper
+// ======================
+std::string openFileDialog() {
+    char filename[MAX_PATH] = "";
+    OPENFILENAME ofn{};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.lpstrFilter = "Video Files\0*.mp4;*.avi;*.mkv;*.mov\0All Files\0*.*\0";
+    ofn.lpstrFile = filename;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_FILEMUSTEXIST;
+    ofn.lpstrTitle = "Select Video File";
+    if (GetOpenFileName(&ofn)) {
+        return std::string(filename);
+    }
+    return "";
+}
+
+// ======================
+// Fix OpenGL defines for Windows
+// ======================
+#ifndef GL_BGR
+#define GL_BGR 0x80E0
+#endif
+#ifndef GL_BGRA
+#define GL_BGRA 0x80E1
+#endif
+
+GLuint matToTexture(const cv::Mat& mat) {
+    if (mat.empty()) return 0;
+    GLuint textureID;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_2D, textureID);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    GLenum format = (mat.channels() == 3) ? GL_BGR : GL_BGRA;
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, mat.cols, mat.rows, 0, format, GL_UNSIGNED_BYTE, mat.ptr());
+    return textureID;
+}
+
+// ======================
+// Main Program
+// ======================
 int main() {
-	std::string videoPath;
+    if (!glfwInit()) return -1;
+    const char* glsl_version = "#version 130";
+    GLFWwindow* window = glfwCreateWindow(1280, 720, "Multithreaded Frame Extractor", nullptr, nullptr);
+    glfwMakeContextCurrent(window);
+    glfwSwapInterval(1);
 
-	std::cout << "Please enter the path to your video: ";
-	std::getline(std::cin, videoPath);
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init(glsl_version);
+    ImGui::StyleColorsDark();
 
-	fs::path videoPathObj(videoPath);
-	std::string folderName = videoPathObj.stem().string(); 
-	fs::create_directory(folderName);
+    // ======================
+    // State variables
+    // ======================
+    std::string videoPath;
+    std::string outputDir;
+    std::string buildDir = fs::current_path().string();  // typically /build/Debug
+    std::string projectRoot = fs::absolute(buildDir + "/../../..").string(); // go one directory up, has problems
+    std::string pythonScript = (fs::path(projectRoot) / "remove_bg.py").string();
 
-	cv::VideoCapture videoCap(videoPath);
+    fs::path outputRoot = fs::path(buildDir);
+    fs::create_directories(outputRoot);
 
-	if (!videoCap.isOpened()) {
-		std::cerr << "Error: Cannot open video file from " << videoPath << ". Please check the path name or if the video exists." << std::endl;
-		return -1;
-	}
+    cv::VideoCapture cap;
+    SafeQueue<std::pair<int, cv::Mat>> frameQueue;
+    std::atomic<bool> extracting = false;
+    std::atomic<bool> extractionDone = false;
+    std::atomic<int> savedCount = 0;
+    std::atomic<int> totalFrames = 0;
+    std::atomic<double> fps = 0;
+    GLuint textureID = 0;
 
-	double fps = videoCap.get(cv::CAP_PROP_FPS); // gets the frame rate
-	double totalFrames = videoCap.get(cv::CAP_PROP_FRAME_COUNT);
-	double duration = totalFrames / fps;
+    // ======================
+    // GUI loop
+    // ======================
+    while (!glfwWindowShouldClose(window)) {
+        glfwPollEvents();
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
 
-	std::cout << "Video Duration: " << duration << " seconds" << std::endl;
-	std::cout << "Frame Rate (FPS): " << fps << std::endl;
-	std::cout << "Total Number of Frames: " << totalFrames << std::endl;
+        ImGui::Begin("Video Frame Extractor", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 
-	cv::Mat frame; // cv::Mat = matrix that stores image data for image manipulation
+        if (ImGui::Button("Choose Video File")) {
+            std::string chosen = openFileDialog();
+            if (!chosen.empty()) {
+                videoPath = chosen;
+                outputDir = (outputRoot / fs::path(videoPath).stem()).string();
+                fs::create_directories(outputDir);
+                cap.open(videoPath);
 
-	int frameCount = 0;
-	int savedCount = 0;
-	std::string filename;
-	bool success = videoCap.read(frame);
+                if (cap.isOpened()) {
+                    fps = cap.get(cv::CAP_PROP_FPS);
+                    totalFrames = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_COUNT));
+                }
+                else {
+                    std::cerr << "Error: Cannot open video.\n";
+                }
+            }
+        }
 
-	while (success) {
+        if (!videoPath.empty()) {
+            ImGui::Text("Video: %s", videoPath.c_str());
+            ImGui::Text("FPS: %.2f", fps.load());
+            ImGui::Text("Total Frames: %d", totalFrames.load());
+            ImGui::Text("Output Directory: %s", outputDir.c_str());
+        }
 
-		if (frameCount % static_cast<int>(fps) == 0) { // (int)fps is the C-style cast (older, less explicit).
-			filename = "frame_" + std::to_string(savedCount) + ".png";
+        static int savedFPS = 1;
+        ImGui::Text("Frames per second to save:");
+        for (int i = 1; i <= 5; i++) {
+            char label[2]; snprintf(label, sizeof(label), "%d", i);
+            if (ImGui::RadioButton(label, savedFPS == i)) savedFPS = i;
+            ImGui::SameLine();
+        }
+        ImGui::NewLine();
 
-			cv::imwrite( folderName + "/" + filename, frame); // saves an image to a specified filename
+        if (!extracting && ImGui::Button("Start Extraction")) {
+            if (cap.isOpened()) {
+                extracting = true;
+                extractionDone = false;
+                savedCount = 0;
 
-			std::cout << "Saved " << filename << std::endl;
+                // --- Thread 1: Frame extraction ---
+                std::thread([&]() {
+                    cv::Mat frame;
+                    int frameIndex = 0, savedIndex = 0;
+                    int step = std::max(1, static_cast<int>(fps / savedFPS));
 
-			savedCount++;
-		}
+                    while (cap.read(frame)) {
+                        if (frameIndex % step == 0) {
+                            frameQueue.push({ savedIndex++, std::move(frame) });
+                        }
+                        frameIndex++;
+                    }
 
-		frameCount++;
-
-		success = videoCap.read(frame);
-	}
-
-	videoCap.release();
-	//	Closes the video file or camera.
-	//	Frees up memory and system handles.
-	//	Makes the resource available for other applications.
+                    extractionDone = true;
+                    cap.release();
+                    }).detach();
 
 
+                // --- Thread 2: Frame saving ---
+                std::thread([&]() {
+                    while (!extractionDone || !frameQueue.empty()) {
+                        std::pair<int, cv::Mat> item;
+                        if (frameQueue.pop(item)) {
+                            std::string filename = (fs::path(outputDir) / ("frame_" + std::to_string(item.first) + ".png")).string();
+                            cv::imwrite(filename, item.second);
+                            savedCount++;
+                        }
+                        else {
+                            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                        }
+                    }
 
-	std::cout << "Finished saving " << savedCount << " frames. ";
+                    // --- After saving all frames, run rembg batch ---
 
-	return 0;
+                    std::string command = "python \"" + pythonScript + "\" \"" + outputDir + "\"";
+                    std::cout << "Running: " << command << std::endl;
+                    system(command.c_str());
 
+                    extracting = false;
+                    }).detach();
+            }
+        }
+
+        if (extracting) {
+            ImGui::Text("Extracting... saved %d frames", savedCount.load()); 
+            ImGui::ProgressBar((float)savedCount.load() / (totalFrames.load()/ fps.load()*savedFPS), ImVec2(300, 20));
+        }
+        else if (!videoPath.empty() && extractionDone) {
+            ImGui::Text("Extraction complete! Total saved: %d", savedCount.load());
+        }
+
+        if (ImGui::Button("Exit")) glfwSetWindowShouldClose(window, true);
+
+        ImGui::End();
+
+        // Render
+        ImGui::Render();
+        int display_w, display_h;
+        glfwGetFramebufferSize(window, &display_w, &display_h);
+        glViewport(0, 0, display_w, display_h);
+        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        glfwSwapBuffers(window);
+    }
+
+    // Cleanup
+    if (textureID) glDeleteTextures(1, &textureID);
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+    glfwDestroyWindow(window);
+    glfwTerminate();
+
+    return 0;
 }
