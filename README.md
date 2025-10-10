@@ -6,7 +6,7 @@ This project is built using C++ to extract frames (per second) from a video inpu
 
 Errors with vcpkg and installation. 
 How to resolve:
-cd C:\
+cd C:\<root>
 git clone https://github.com/microsoft/vcpkg.git  
 cd vcpkg  
 .\bootstrap-vcpkg.bat  
@@ -16,26 +16,26 @@ cd vcpkg
 
 .\vcpkg integrate install
 
-//It doesn’t work with the file path “/Renee Khan/” because there is a space
-Shorten or move to C:/
-
-
-Errors with <opencv2/opencv>
-You need CMAKE for the linkers  
+cd ..
 git clone https://github.com/bkaradzic/bgfx.cmake.git  
 cd bgfx.cmake  
 git submodule init  
 git submodule update  
 
-cd C:\  
+cd ..    
 git clone https://github.com/ocornut/imgui.git  
-cd C:\  
+cd ..    
 git clone https://github.com/glfw/glfw.git  
 cd glfw  
 cmake -S . -B build  
 cmake --build build  
 
+//It doesn’t work with the file path “/Renee Khan/” because there is a space
+Shorten or move to C:/
 
+
+Errors with <opencv2/opencv>
+You need CMAKE for the linkers 
 
 Create CMake.txt
 cmake_minimum_required(VERSION 3.10)
