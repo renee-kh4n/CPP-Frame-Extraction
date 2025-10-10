@@ -24,7 +24,8 @@ git submodule update
 
 cd ..    
 git clone https://github.com/ocornut/imgui.git  
-cd ..    
+
+
 git clone https://github.com/glfw/glfw.git  
 cd glfw  
 cmake -S . -B build  
