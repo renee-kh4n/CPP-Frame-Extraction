@@ -22,18 +22,18 @@ Shorten or move to C:/
 
 Errors with <opencv2/opencv>
 You need CMAKE for the linkers
-git clone https://github.com/bkaradzic/bgfx.cmake.git
-cd bgfx.cmake
-git submodule init
-git submodule update
+git clone https://github.com/bkaradzic/bgfx.cmake.git  
+cd bgfx.cmake  
+git submodule init  
+git submodule update  
 
 
-git clone https://github.com/ocornut/imgui.git
+git clone https://github.com/ocornut/imgui.git  
 
-git clone https://github.com/glfw/glfw.git
-cd glfw
-cmake -S . -B build
-cmake --build build
+git clone https://github.com/glfw/glfw.git  
+cd glfw  
+cmake -S . -B build  
+cmake --build build  
 
 
 
