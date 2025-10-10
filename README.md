@@ -7,7 +7,7 @@ This project is built using C++ to extract frames (per second) from a video inpu
 Errors with vcpkg and installation. 
 How to resolve:
 cd C:\
-git clone https://github.com/microsoft/vcpkg.git
+git clone https://github.com/microsoft/vcpkg.git  
 cd vcpkg
 .\bootstrap-vcpkg.bat
 .\vcpkg install opencv:x64-windows
