@@ -113,7 +113,7 @@ int main() {
     std::string videoPath;
     std::string outputDir;
     std::string buildDir = fs::current_path().string();  // typically /build/Debug
-    std::string projectRoot = fs::absolute(buildDir + "/../..").string(); // go one directory up
+    std::string projectRoot = fs::absolute(buildDir + "/../../..").string(); // go one directory up, has problems
     std::string pythonScript = (fs::path(projectRoot) / "remove_bg.py").string();
 
     fs::path outputRoot = fs::path(buildDir);
