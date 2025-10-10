@@ -27,9 +27,9 @@ cd bgfx.cmake
 git submodule init  
 git submodule update  
 
-
+cd C:\  
 git clone https://github.com/ocornut/imgui.git  
-
+cd C:\  
 git clone https://github.com/glfw/glfw.git  
 cd glfw  
 cmake -S . -B build  
